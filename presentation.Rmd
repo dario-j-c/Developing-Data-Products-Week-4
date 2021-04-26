@@ -1,0 +1,104 @@
+---
+title: "Presentation - Shiny App"
+author: "Dario J C"
+date: "25/04/2021"
+output: ioslides_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+library(WikidataQueryServiceR)
+library(stringr)
+library(readr)
+library(dplyr)
+library(tidyr)
+
+
+# Query Wikipedia for scientists
+scraped_raw <- query_wikidata('SELECT ?scientist ?scientistLabel ?birthdate ?countryLabel ?coord WHERE {
+  ?scientist ?x1 wd:Q901;
+  wdt:P569 ?birthdate;
+  wdt:P19 ?birthplace;
+             wdt:P27 ?country.
+ 
+  ?birthplace wdt:P625 ?coord
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+}
+ORDER BY DESC(?birthdate)')
+
+# Query Wikipedia for fictional scientists to remove
+fictional_scrape_raw <- query_wikidata('SELECT ?scientist ?scientistLabel ?birthdate ?countryLabel ?narrative ?coord WHERE {
+  ?scientist ?x1 wd:Q901;
+  wdt:P569 ?birthdate;
+  wdt:P19 ?birthplace;
+             wdt:P1080 ?narrative;
+             wdt:P27 ?country.
+ 
+  ?birthplace wdt:P625 ?coord
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+}
+ORDER BY DESC(?birthdate)')
+
+
+# Clean the query results
+table_clean <- scraped_raw %>%
+  mutate( coord = str_replace_all(string = coord,
+                                  pattern = "(Point|\\(|\\))",
+                                  replacement = ""),
+          birthdate = as.Date(birthdate)
+  ) %>%
+  separate( col = coord,
+            into = c("long", "lat"),
+            sep = " ",
+            remove = TRUE) %>%
+  mutate( long = parse_number(long),
+          lat = parse_number(lat)) %>%
+  rename(country = countryLabel,
+         link = scientist,
+         scientist = scientistLabel) %>%
+  filter(link != fictional_scrape_raw$scientist &
+           str_count(scientist, pattern = " ") >= 1
+  ) %>%
+  select(scientist,
+         birthdate,
+         country,
+         long,
+         lat,
+         link)
+
+
+```
+
+## Scientists & Their Birth Places
+
+The goal of this app is to let the user explore where scientists have been born. 
+
+* The Data is directly queried from Wikipedia ([Wikidata](https://www.wikidata.org/wiki/Wikidata:Main_Page)).
+* The code can be found on [github](https://github.com/dario-j-c/Developing-Data-Products-Week-4).
+* The app can be found on [shiny](https://dario-j-c.shinyapps.io/scientists_location/).
+
+## Data Used
+
+The r package, [WikidataQueryServiceR](https://github.com/wikimedia/WikidataQueryServiceR) was used to query and get the raw data. That data was minimally cleaned until we got the following.
+
+```{r summary, echo = TRUE}
+head(table_clean) %>%
+  gt::gt()
+
+```
+
+
+## Method
+
+The app allows the user to:
+
+* Automatically query Wikidata about all their listed scientists
+* Filter the generated table by date of birth and / or place of citizenship (country)
+* Explore (before or after filtering) the generated map and table listing
+  * The scientists' names
+  * The location of their birth (this is not always the same as place of citizenship)
+
+## Conclusion
+
+Enjoy & Thank You
